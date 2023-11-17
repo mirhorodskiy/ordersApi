@@ -76,10 +76,7 @@ public class OrderServiceImpl implements OrderService {
         order.setCreatedAt(LocalDateTime.now());
 
         updateGoodsQuantities(order, false);
-        System.out.println(order);
-        var newOrder = orderRepository.save(order);
-        System.out.println("order after saving:" + newOrder);
-        return newOrder;
+        return orderRepository.save(order);
     }
 
     private List<OrderItem> createOrderItems(List<OrderItemRequest> orderItemRequests, Order order) {
