@@ -1,5 +1,6 @@
 package com.myrhorodskyi.ordersApi.service.impl;
 
+import com.myrhorodskyi.ordersApi.exception.SearchRuntimeException;
 import com.myrhorodskyi.ordersApi.model.entity.Goods;
 import com.myrhorodskyi.ordersApi.repository.GoodsRepository;
 import com.myrhorodskyi.ordersApi.service.GoodsService;
@@ -26,7 +27,7 @@ public class GoodsServiceImpl implements GoodsService {
 
     @Override
     public Goods getGoodsById(Long id) {
-        return goodsRepository.findById(id).orElse(null);
+        return goodsRepository.findById(id).orElseThrow(() -> new SearchRuntimeException("Goods not found with id " + id));
     }
 
     @Override
@@ -43,12 +44,14 @@ public class GoodsServiceImpl implements GoodsService {
             existingGoods.setPrice(goods.getPrice());
             existingGoods.setQuantity(goods.getQuantity());
             return goodsRepository.save(existingGoods);
+        } else {
+            throw new SearchRuntimeException("Goods not found with id " + id);
         }
-        return null;
     }
 
     @Override
     public void deleteGoods(Long id) {
-        goodsRepository.deleteById(id);
+        var goods = goodsRepository.findById(id).orElseThrow(() -> new SearchRuntimeException("Goods not found with id " + id));
+        goodsRepository.delete(goods);
     }
 }

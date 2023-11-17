@@ -13,7 +13,7 @@ public interface OrderService {
 
     Order createOrder(OrderRequest orderRequest);
 
-    void deleteOrder(Long id);
+    void cancelOrder(Long id);
 
     void payOrder(Long orderId);
 }

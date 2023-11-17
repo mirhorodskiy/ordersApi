@@ -2,6 +2,7 @@ package com.myrhorodskyi.ordersApi.service.impl;
 
 import com.myrhorodskyi.ordersApi.dto.OrderItemRequest;
 import com.myrhorodskyi.ordersApi.dto.OrderRequest;
+import com.myrhorodskyi.ordersApi.exception.SearchRuntimeException;
 import com.myrhorodskyi.ordersApi.model.entity.Goods;
 import com.myrhorodskyi.ordersApi.model.entity.Order;
 import com.myrhorodskyi.ordersApi.model.entity.OrderItem;
@@ -38,84 +39,109 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public Order getOrderById(Long id) {
-        return orderRepository.findById(id).orElse(null);
+        return orderRepository.findById(id).orElseThrow(() -> new SearchRuntimeException("Order not found with id: " + id));
     }
-
-//    @Override
-//    public Order createOrder(Order order) {
-//        order.setStatus(OrderStatus.NEW);
-//        order.setCreatedAt(LocalDateTime.now());
-//        updateGoodsQuantities(order, false);
-//        return orderRepository.save(order);
-//    }
 
     @Override
     public Order createOrder(OrderRequest orderRequest) {
+        String customerName = orderRequest.getCustomerName();
         List<OrderItemRequest> orderItemRequests = orderRequest.getOrderItems();
+
+        if (customerName == null || orderItemRequests == null || orderItemRequests.isEmpty()) {
+            throw new IllegalArgumentException("Invalid order request");
+        }
+
 
         double totalAmount = orderItemRequests.stream()
                 .mapToDouble(orderItem -> {
-                    Goods goods = goodsRepository.findById(orderItem.getGoodsId()).orElse(null);
-                    if (goods != null) {
-                        return goods.getPrice() * orderItem.getQuantity();
+                    Long goodsId = orderItem.getGoodsId();
+                    int quantity = orderItem.getQuantity();
+
+                    Goods goods = goodsRepository.findById(goodsId).orElseThrow(() ->
+                            new SearchRuntimeException("Goods not found with id: " + goodsId));
+
+                    if (goods.getQuantity() < quantity) {
+                        throw new IllegalStateException("Not enough quantity available for goods with id: " + goodsId);
                     }
-                    return 0.0;
+
+                    return goods.getPrice() * quantity;
                 })
                 .sum();
 
         Order order = new Order();
-        order.setCustomerName(orderRequest.getCustomerName());
+        order.setCustomerName(customerName);
         order.setOrderItems(createOrderItems(orderItemRequests, order));
         order.setTotalAmount(totalAmount);
         order.setStatus(OrderStatus.NEW);
         order.setCreatedAt(LocalDateTime.now());
 
         updateGoodsQuantities(order, false);
-
-        return orderRepository.save(order);
+        System.out.println(order);
+        var newOrder = orderRepository.save(order);
+        System.out.println("order after saving:" + newOrder);
+        return newOrder;
     }
 
     private List<OrderItem> createOrderItems(List<OrderItemRequest> orderItemRequests, Order order) {
         List<OrderItem> orderItems = new ArrayList<>();
         for (OrderItemRequest orderItemRequest : orderItemRequests) {
-            Goods goods = goodsRepository.findById(orderItemRequest.getGoodsId()).orElse(null);
-            if (goods != null) {
-                OrderItem orderItem = new OrderItem();
-                orderItem.setGoods(goods);
-                orderItem.setQuantity(orderItemRequest.getQuantity());
-                orderItem.setOrder(order);
-                orderItems.add(orderItem);
-            }
+            Long goodsId = orderItemRequest.getGoodsId();
+            int quantity = orderItemRequest.getQuantity();
+
+            Goods goods = goodsRepository.findById(goodsId).orElseThrow(() ->
+                    new SearchRuntimeException("Goods not found with id: " + goodsId));
+
+            OrderItem orderItem = new OrderItem();
+            orderItem.setGoods(goods);
+            orderItem.setQuantity(quantity);
+            orderItem.setOrder(order);
+            orderItems.add(orderItem);
         }
         return orderItems;
     }
 
 
-
     @Override
-    public void deleteOrder(Long id) {
-        orderRepository.deleteById(id);
+    public void cancelOrder(Long id) {
+        Optional<Order> optionalOrder = orderRepository.findById(id);
+
+        if (optionalOrder.isPresent()) {
+            Order order = optionalOrder.get();
+
+            if (order.getStatus().equals(OrderStatus.NEW)) {
+                updateGoodsQuantities(order, true);
+                order.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(order);
+            } else {
+                throw new IllegalStateException("Can only cancel orders with status NEW");
+            }
+        } else {
+            throw new SearchRuntimeException("Order not found with id: " + id);
+        }
     }
 
     @Override
     public void payOrder(Long orderId) {
         Optional<Order> orderOptional = orderRepository.findById(orderId);
-        if (orderOptional.isPresent()) {
+        if (orderOptional.isPresent() && orderOptional.get().getStatus().equals(OrderStatus.NEW)) {
             Order order = orderOptional.get();
             order.setStatus(OrderStatus.PAID);
             orderRepository.save(order);
+        } else {
+            throw new SearchRuntimeException("Order not found with id: " + orderId);
         }
     }
 
     @Scheduled(fixedRate = 600000)
-    @Transactional
+    @Transactional()
     public void deleteUnpaidOrders() {
         LocalDateTime tenMinutesAgo = LocalDateTime.now().minusMinutes(10);
         List<Order> unpaidOrders = orderRepository.findByStatusAndCreatedAtBefore(OrderStatus.NEW, tenMinutesAgo);
 
         for (Order order : unpaidOrders) {
             updateGoodsQuantities(order, true);
-            orderRepository.delete(order);
+            order.setStatus(OrderStatus.CANCELLED);
+            orderRepository.save(order);
         }
     }
 

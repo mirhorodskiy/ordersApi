@@ -17,14 +17,21 @@ public class OrderItem {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
     @JsonIgnore
     private Order order;
 
+    @Override
+    public String toString() {
+        return "OrderItem{" +
+                "id=" + id +
+                ", quantity=" + quantity +
+                '}';
+    }
+
     @ManyToOne
     @JoinColumn(name = "goods_id")
-    @JsonIgnore
     private Goods goods;
 
     private int quantity;

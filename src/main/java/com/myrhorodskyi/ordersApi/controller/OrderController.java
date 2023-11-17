@@ -34,10 +34,9 @@ public class OrderController {
         return orderService.createOrder(orderRequest);
     }
 
-
     @DeleteMapping("/{id}")
-    public void deleteOrder(@PathVariable Long id) {
-        orderService.deleteOrder(id);
+    public void cancelOrder(@PathVariable Long id) {
+        orderService.cancelOrder(id);
     }
 
     @PostMapping("/{orderId}/pay")
